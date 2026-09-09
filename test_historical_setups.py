@@ -61,5 +61,5 @@ async def backtest_scan(symbol: str = "BTC/USDT:USDT", timeframe: str = "1m", li
 
 if __name__ == "__main__":
     tf = sys.argv[1] if len(sys.argv) > 1 else "1m"
-    sym = sys.argv[2] if len(sys.argv) > 2 else "BTC/USDT:USDT"
+    sym = sys.argv[2] if len(sys.argv) > 2 else "BTC/USDT"
     asyncio.run(backtest_scan(symbol=sym, timeframe=tf, limit=500))
