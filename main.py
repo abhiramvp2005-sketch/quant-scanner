@@ -17,7 +17,7 @@ async def run_scanner():
     
     # Configuration explicitly defined for the async loop
     btc_cfg = {
-        "symbol": "BTC/USDT:USDT",
+        "symbol": "BTC/USDT",
         "timeframe": "15m",
         "fast_ema": 10,
         "slow_ema": 200,

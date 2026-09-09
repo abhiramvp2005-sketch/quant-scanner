@@ -9,7 +9,7 @@ logger = logging.getLogger("DataIngestion")
 class DataIngestion:
     def __init__(self):
         # Using the synchronous ccxt library because it natively respects Windows WARP VPN adapters
-        self.exchange = ccxt.binanceusdm({
+        self.exchange = ccxt.binance({
             'enableRateLimit': True
         })
 

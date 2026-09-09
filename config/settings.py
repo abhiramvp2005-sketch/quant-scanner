@@ -21,7 +21,7 @@ SCAN_INTERVAL_SECONDS = 60  # Polling interval for state checking
 
 CONFIG_MAP = {
     "BTCUSDT": {
-        "symbol": "BTC/USDT:USDT",
+        "symbol": "BTC/USDT",
         "timeframe": "15m",
         "fast_ema": 10,
         "slow_ema": 200,
