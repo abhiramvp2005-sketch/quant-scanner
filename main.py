@@ -1,5 +1,8 @@
 import asyncio
 import logging
+import time
+from datetime import datetime, timedelta, timezone
+
 from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from src.data_ingestion import DataIngestion
 from src.indicators import TechnicalIndicators
@@ -7,6 +10,27 @@ from src.strategy_engine import PullbackRejectionStrategy
 from src.alerts import TelegramAlertManager
 
 logger = logging.getLogger("MainOrchestrator")
+
+def timeframe_to_seconds(timeframe: str) -> int:
+    """Convert timeframe string like '15m', '1h', '1d' into total seconds."""
+    unit = timeframe[-1].lower()
+    val = int(timeframe[:-1])
+    multipliers = {
+        's': 1,
+        'm': 60,
+        'h': 3600,
+        'd': 86400,
+        'w': 604800
+    }
+    return val * multipliers.get(unit, 60)
+
+def get_seconds_until_candle_close(timeframe: str, buffer_seconds: float = 3.0) -> float:
+    """Calculate exact seconds remaining until current candle close plus a network buffer."""
+    tf_seconds = timeframe_to_seconds(timeframe)
+    now = time.time()
+    next_close = ((int(now) // tf_seconds) + 1) * tf_seconds
+    seconds_remaining = (next_close - now) + buffer_seconds
+    return max(seconds_remaining, buffer_seconds)
 
 async def run_scanner():
     logger.info("Initializing Quant Scanner Runtime Systems...")
@@ -24,74 +48,104 @@ async def run_scanner():
         "limit": 250
     }
 
-    
     print(f"DEBUG: Active Timeframe is {btc_cfg['timeframe']}")
     last_processed_timestamp = None
 
-    while True:
-        try:
-            logger.info(f"Scanning market cycle for asset: {btc_cfg['symbol']}...")
-            
-            # 1. Fetch live market data
-            df = await ingestion.fetch_ohlcv_dataframe(
-                symbol=btc_cfg["symbol"], 
-                timeframe=btc_cfg["timeframe"], 
-                limit=btc_cfg["limit"]
-            )
-            
-            if df is not None and not df.empty:
-                current_closed_candle_time = df.iloc[-2]['timestamp']
-                current_close_price = df.iloc[-2]['close']
+    # Send Startup Telegram Alert
+    startup_msg = (
+        f"🚀 <b>QUANT SCANNER ONLINE</b> 🚀\n\n"
+        f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
+        f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
+        f"• <b>EMAs:</b> Fast {btc_cfg['fast_ema']} | Slow {btc_cfg['slow_ema']}\n"
+        f"• <b>Polling Mode:</b> Smart Sleep (Candle-Synchronized)\n"
+        f"• <b>Status:</b> Scanner is running and monitoring candles."
+    )
+    await alerter.send_alert(startup_msg)
+
+    try:
+        while True:
+            try:
+                logger.info(f"Scanning market cycle for asset: {btc_cfg['symbol']}...")
                 
-                # 2. Process Strategy Logic
-                if last_processed_timestamp != current_closed_candle_time:
-                    formatted_ist_time = current_closed_candle_time.strftime("%d-%m-%Y %I:%M:%S %p")
-                    logger.info(f"New data fetched. Latest closed candle (IST): {formatted_ist_time} | Close Price: ${current_close_price}")
+                # 1. Fetch live market data
+                df = await ingestion.fetch_ohlcv_dataframe(
+                    symbol=btc_cfg["symbol"], 
+                    timeframe=btc_cfg["timeframe"], 
+                    limit=btc_cfg["limit"]
+                )
+                
+                if df is not None and not df.empty:
+                    current_closed_candle_time = df.iloc[-2]['timestamp']
+                    current_close_price = df.iloc[-2]['close']
                     
-                    # Compute indicators
-                    df = TechnicalIndicators.calculate_emas(df, btc_cfg["fast_ema"], btc_cfg["slow_ema"])
-                    
-                    # Evaluate trading logic
-                    is_bearish = strategy.evaluate_bearish_setup(df)
-                    is_bullish = strategy.evaluate_bullish_setup(df)
-                    
-                    if is_bearish:
-                        logger.warning("🚨 BEARISH PULLBACK REJECTION DETECTED 🚨")
-                        alert_msg = (
-                            f"🚨 <b>STRATEGY ALERT: BEARISH CONTINUATION</b> 🚨\n\n"
-                            f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
-                            f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
-                            f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
-                            f"• <b>Setup Status:</b> Bearish Rejection Confirmed\n"
-                            f"• <b>Execution Candle Close:</b> <code>${current_close_price}</code>\n"
-                        )
-                        await alerter.send_alert(alert_msg)
-                    elif is_bullish:
-                        logger.warning("🟢 BULLISH PULLBACK REJECTION DETECTED 🟢")
-                        alert_msg = (
-                            f"🟢 <b>STRATEGY ALERT: BULLISH CONTINUATION</b> 🟢\n\n"
-                            f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
-                            f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
-                            f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
-                            f"• <b>Setup Status:</b> Bullish Pullback Rejection Confirmed\n"
-                            f"• <b>Execution Candle Close:</b> <code>${current_close_price}</code>\n"
-                        )
-                        await alerter.send_alert(alert_msg)
+                    # 2. Process Strategy Logic
+                    if last_processed_timestamp != current_closed_candle_time:
+                        formatted_ist_time = current_closed_candle_time.strftime("%d-%m-%Y %I:%M:%S %p")
+                        logger.info(f"New closed candle finalized (IST): {formatted_ist_time} | Close Price: ${current_close_price}")
+                        
+                        # Compute indicators
+                        df = TechnicalIndicators.calculate_emas(df, btc_cfg["fast_ema"], btc_cfg["slow_ema"])
+                        
+                        # Evaluate trading logic
+                        is_bearish = strategy.evaluate_bearish_setup(df)
+                        is_bullish = strategy.evaluate_bullish_setup(df)
+                        
+                        if is_bearish:
+                            logger.warning("🚨 BEARISH PULLBACK REJECTION DETECTED 🚨")
+                            alert_msg = (
+                                f"🚨 <b>STRATEGY ALERT: BEARISH CONTINUATION</b> 🚨\n\n"
+                                f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
+                                f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
+                                f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
+                                f"• <b>Setup Status:</b> Bearish Rejection Confirmed\n"
+                                f"• <b>Execution Candle Close:</b> <code>${current_close_price}</code>\n"
+                            )
+                            await alerter.send_alert(alert_msg)
+                        elif is_bullish:
+                            logger.warning("🟢 BULLISH PULLBACK REJECTION DETECTED 🟢")
+                            alert_msg = (
+                                f"🟢 <b>STRATEGY ALERT: BULLISH CONTINUATION</b> 🟢\n\n"
+                                f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
+                                f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
+                                f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
+                                f"• <b>Setup Status:</b> Bullish Pullback Rejection Confirmed\n"
+                                f"• <b>Execution Candle Close:</b> <code>${current_close_price}</code>\n"
+                            )
+                            await alerter.send_alert(alert_msg)
+                        else:
+                            logger.info("Market data evaluated: No valid setup found on this candle.")
+                        
+                        last_processed_timestamp = current_closed_candle_time
+                        
+                        # Calculate Smart Sleep until next candle close (+3s network buffer)
+                        sleep_seconds = get_seconds_until_candle_close(btc_cfg["timeframe"], buffer_seconds=3.0)
+                        ist_offset = timezone(timedelta(hours=5, minutes=30))
+                        next_wake_ist = (datetime.now(ist_offset) + timedelta(seconds=sleep_seconds)).strftime("%I:%M:%S %p")
+                        logger.info(f"Smart Sleep active: sleeping {int(sleep_seconds)}s until next candle close (~{next_wake_ist} IST)...")
+                        await asyncio.sleep(sleep_seconds)
                     else:
-                        logger.info("Market data evaluated: No valid setup found on this candle.")
-                    
-                    last_processed_timestamp = current_closed_candle_time
+                        # Rare case: exchange hasn't published the candle yet on boundary wakeup
+                        logger.info("Candle not yet finalized on exchange. Retrying in 5 seconds...")
+                        await asyncio.sleep(5)
                 else:
-                    logger.info("Candle is still active. Skipping logic evaluation to avoid lookahead/repainting bias.")
-            else:
-                logger.warning("Network connected, but returned an empty dataframe.")
-            
-            # Wait 60 seconds before polling Binance again
-            await asyncio.sleep(60)
-            
-        except Exception as e:
-            logger.error(f"Main Loop failed with error: {str(e)}")
-            await asyncio.sleep(15)
+                    logger.warning("Network connected, but returned an empty dataframe. Retrying in 15 seconds...")
+                    await asyncio.sleep(15)
+                
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                raise
+            except Exception as e:
+                logger.error(f"Main Loop failed with error: {str(e)}")
+                await asyncio.sleep(15)
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        logger.info("Scanner shutdown signal received.")
+    finally:
+        termination_msg = (
+            f"🛑 <b>QUANT SCANNER TERMINATED</b> 🛑\n\n"
+            f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
+            f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
+            f"• <b>Status:</b> System offline / Scanner terminated."
+        )
+        alerter.send_alert_sync(termination_msg)
 
 if __name__ == "__main__":
     import sys, io
