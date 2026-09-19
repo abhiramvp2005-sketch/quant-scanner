@@ -42,7 +42,7 @@ async def run_scanner():
     # Configuration explicitly defined for the async loop
     btc_cfg = {
         "symbol": "BTC/USDT",
-        "timeframe": "15m",
+        "timeframe": "4h",
         "fast_ema": 10,
         "slow_ema": 200,
         "limit": 250
@@ -90,26 +90,45 @@ async def run_scanner():
                         is_bearish = strategy.evaluate_bearish_setup(df)
                         is_bullish = strategy.evaluate_bullish_setup(df)
                         
+                        c_reject = df.iloc[-2]
                         if is_bearish:
                             logger.warning("🚨 BEARISH PULLBACK REJECTION DETECTED 🚨")
+                            sl = c_reject["high"]
+                            risk = sl - current_close_price
+                            risk_pct = (risk / current_close_price) * 100
+                            target_1_5r = current_close_price - (risk * 1.5)
+                            target_2r = current_close_price - (risk * 2.0)
+                            
                             alert_msg = (
-                                f"🚨 <b>STRATEGY ALERT: BEARISH CONTINUATION</b> 🚨\n\n"
+                                f"🎯 <b>SNIPER ALERT: BEARISH REJECTION</b> 🎯\n\n"
                                 f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
                                 f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
                                 f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
-                                f"• <b>Setup Status:</b> Bearish Rejection Confirmed\n"
-                                f"• <b>Execution Candle Close:</b> <code>${current_close_price}</code>\n"
+                                f"• <b>Entry Price:</b> <code>${current_close_price:,.2f}</code>\n"
+                                f"• <b>Stop Loss:</b> <code>${sl:,.2f}</code> ({risk_pct:.2f}% risk)\n"
+                                f"• <b>Target 1 (1.5R):</b> <code>${target_1_5r:,.2f}</code>\n"
+                                f"• <b>Target 2 (2.0R):</b> <code>${target_2r:,.2f}</code>\n"
+                                f"• <b>EMA 10:</b> <code>${c_reject['EMA_10']:,.2f}</code> | <b>EMA 200:</b> <code>${c_reject['EMA_200']:,.2f}</code>\n"
                             )
                             await alerter.send_alert(alert_msg)
                         elif is_bullish:
                             logger.warning("🟢 BULLISH PULLBACK REJECTION DETECTED 🟢")
+                            sl = c_reject["low"]
+                            risk = current_close_price - sl
+                            risk_pct = (risk / current_close_price) * 100
+                            target_1_5r = current_close_price + (risk * 1.5)
+                            target_2r = current_close_price + (risk * 2.0)
+                            
                             alert_msg = (
-                                f"🟢 <b>STRATEGY ALERT: BULLISH CONTINUATION</b> 🟢\n\n"
+                                f"🎯 <b>SNIPER ALERT: BULLISH REJECTION</b> 🎯\n\n"
                                 f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
                                 f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
                                 f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
-                                f"• <b>Setup Status:</b> Bullish Pullback Rejection Confirmed\n"
-                                f"• <b>Execution Candle Close:</b> <code>${current_close_price}</code>\n"
+                                f"• <b>Entry Price:</b> <code>${current_close_price:,.2f}</code>\n"
+                                f"• <b>Stop Loss:</b> <code>${sl:,.2f}</code> ({risk_pct:.2f}% risk)\n"
+                                f"• <b>Target 1 (1.5R):</b> <code>${target_1_5r:,.2f}</code>\n"
+                                f"• <b>Target 2 (2.0R):</b> <code>${target_2r:,.2f}</code>\n"
+                                f"• <b>EMA 10:</b> <code>${c_reject['EMA_10']:,.2f}</code> | <b>EMA 200:</b> <code>${c_reject['EMA_200']:,.2f}</code>\n"
                             )
                             await alerter.send_alert(alert_msg)
                         else:
