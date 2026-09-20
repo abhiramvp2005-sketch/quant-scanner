@@ -10,10 +10,10 @@ from src.indicators import TechnicalIndicators
 from src.strategy_engine import PullbackRejectionStrategy
 
 async def backtest_scan(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: int = 500):
-    print("=" * 75)
-    print(f"📊 SNIPER HISTORICAL SETUP SCANNER & CHART VERIFIER")
+    print("=" * 85)
+    print(f"📊 SNIPER 10/15 EMA RIBBON HISTORICAL SETUP SCANNER")
     print(f"Asset: {symbol} | Timeframe: {timeframe} | Scanning last {limit} candles...")
-    print("=" * 75)
+    print("=" * 85)
 
     ingestion = DataIngestion()
     strategy = PullbackRejectionStrategy()
@@ -24,7 +24,7 @@ async def backtest_scan(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: 
         return
 
     # Calculate indicators over the entire historical dataframe
-    df = TechnicalIndicators.calculate_emas(df, fast_period=10, slow_period=200)
+    df = TechnicalIndicators.calculate_emas(df, fast_period=10, mid_period=15, slow_period=200)
 
     detected_setups = []
 
@@ -32,8 +32,8 @@ async def backtest_scan(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: 
     for i in range(205, len(df)):
         sub_df = df.iloc[:i+1].copy()
         
-        is_bearish = strategy.evaluate_bearish_setup(sub_df)
-        is_bullish = strategy.evaluate_bullish_setup(sub_df)
+        is_bearish, bear_pattern, bear_sl = strategy.evaluate_bearish_setup(sub_df)
+        is_bullish, bull_pattern, bull_sl = strategy.evaluate_bullish_setup(sub_df)
 
         if is_bearish or is_bullish:
             candle = sub_df.iloc[-2] # Rejection / Signal candle (just closed)
@@ -41,25 +41,32 @@ async def backtest_scan(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: 
             
             if is_bearish:
                 signal_type = "🚨 BEARISH"
-                stop_loss = candle["high"]
+                pattern = bear_pattern
+                stop_loss = bear_sl
                 risk = stop_loss - entry_price
                 risk_pct = (risk / entry_price) * 100
                 target_1_5r = entry_price - (risk * 1.5)
+                target_2r = entry_price - (risk * 2.0)
             else:
                 signal_type = "🟢 BULLISH"
-                stop_loss = candle["low"]
+                pattern = bull_pattern
+                stop_loss = bull_sl
                 risk = entry_price - stop_loss
                 risk_pct = (risk / entry_price) * 100
                 target_1_5r = entry_price + (risk * 1.5)
+                target_2r = entry_price + (risk * 2.0)
 
             detected_setups.append({
+                "Timestamp (IST)": candle["timestamp"].strftime("%d-%m-%Y %I:%M %p"),
                 "Type": signal_type,
-                "Signal Close (IST)": candle["timestamp"].strftime("%d-%m-%Y %I:%M:%S %p"),
+                "Pattern": pattern,
                 "Entry Price": f"${entry_price:.2f}",
                 "Stop Loss": f"${stop_loss:.2f}",
                 "Risk %": f"{risk_pct:.2f}%",
                 "Target (1.5R)": f"${target_1_5r:.2f}",
+                "Target (2.0R)": f"${target_2r:.2f}",
                 "EMA_10": f"${candle['EMA_10']:.2f}",
+                "EMA_15": f"${candle['EMA_15']:.2f}",
                 "EMA_200": f"${candle['EMA_200']:.2f}",
                 "Volume": f"{candle['volume']:.2f}"
             })
@@ -67,7 +74,7 @@ async def backtest_scan(symbol: str = "BTC/USDT", timeframe: str = "4h", limit: 
     if not detected_setups:
         print("\nℹ️ No setups occurred in the scanned window.")
     else:
-        print(f"\n🎯 FOUND {len(detected_setups)} SNIPER SETUP(S):\n")
+        print(f"\n🎯 FOUND {len(detected_setups)} SNIPER 10/15 EMA SETUP(S):\n")
         results_df = pd.DataFrame(detected_setups)
         print(results_df.to_string(index=False))
         print("\n💡 TIP: Check the timestamps above on your TradingView chart to inspect the exact entry candles!")

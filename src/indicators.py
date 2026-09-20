@@ -3,9 +3,9 @@ import pandas_ta as ta
 
 class TechnicalIndicators:
     @staticmethod
-    def calculate_emas(df: pd.DataFrame, fast_period: int = 10, slow_period: int = 200) -> pd.DataFrame:
+    def calculate_emas(df: pd.DataFrame, fast_period: int = 10, mid_period: int = 15, slow_period: int = 200) -> pd.DataFrame:
         """
-        Applies EMA and volatility metrics securely over historical sets.
+        Applies 10 EMA, 15 EMA, 200 EMA, and volatility metrics over OHLCV data.
         Expects a DataFrame containing standard ['open', 'high', 'low', 'close', 'volume'] columns.
         """
         df = df.copy()
@@ -17,8 +17,9 @@ class TechnicalIndicators:
         df["close"] = pd.to_numeric(df["close"])
         df["volume"] = pd.to_numeric(df["volume"])
         
-        # Vectorized EMA calculation
+        # Vectorized EMA calculations
         df[f"EMA_{fast_period}"] = ta.ema(df["close"], length=fast_period)
+        df[f"EMA_{mid_period}"] = ta.ema(df["close"], length=mid_period)
         df[f"EMA_{slow_period}"] = ta.ema(df["close"], length=slow_period)
         
         # Calculate EMA Slopes over a 3-candle rolling window for trend validation

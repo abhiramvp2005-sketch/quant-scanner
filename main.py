@@ -40,10 +40,12 @@ async def run_scanner():
     alerter = TelegramAlertManager(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
     
     # Configuration explicitly defined for the async loop
+    # Configuration explicitly defined for the async loop
     btc_cfg = {
         "symbol": "BTC/USDT",
         "timeframe": "4h",
         "fast_ema": 10,
+        "mid_ema": 15,
         "slow_ema": 200,
         "limit": 250
     }
@@ -53,10 +55,10 @@ async def run_scanner():
 
     # Send Startup Telegram Alert
     startup_msg = (
-        f"🚀 <b>QUANT SCANNER ONLINE</b> 🚀\n\n"
+        f"🚀 <b>QUANT SCANNER ONLINE (10/15 EMA RIBBON)</b> 🚀\n\n"
         f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
         f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
-        f"• <b>EMAs:</b> Fast {btc_cfg['fast_ema']} | Slow {btc_cfg['slow_ema']}\n"
+        f"• <b>EMAs:</b> Fast {btc_cfg['fast_ema']} | Mid {btc_cfg['mid_ema']} | Slow {btc_cfg['slow_ema']}\n"
         f"• <b>Polling Mode:</b> Smart Sleep (Candle-Synchronized)\n"
         f"• <b>Status:</b> Scanner is running and monitoring candles."
     )
@@ -84,51 +86,58 @@ async def run_scanner():
                         logger.info(f"New closed candle finalized (IST): {formatted_ist_time} | Close Price: ${current_close_price}")
                         
                         # Compute indicators
-                        df = TechnicalIndicators.calculate_emas(df, btc_cfg["fast_ema"], btc_cfg["slow_ema"])
+                        df = TechnicalIndicators.calculate_emas(
+                            df, 
+                            fast_period=btc_cfg["fast_ema"], 
+                            mid_period=btc_cfg["mid_ema"], 
+                            slow_period=btc_cfg["slow_ema"]
+                        )
                         
                         # Evaluate trading logic
-                        is_bearish = strategy.evaluate_bearish_setup(df)
-                        is_bullish = strategy.evaluate_bullish_setup(df)
+                        is_bearish, bear_pattern, bear_sl = strategy.evaluate_bearish_setup(df)
+                        is_bullish, bull_pattern, bull_sl = strategy.evaluate_bullish_setup(df)
                         
                         c_reject = df.iloc[-2]
                         if is_bearish:
-                            logger.warning("🚨 BEARISH PULLBACK REJECTION DETECTED 🚨")
-                            sl = c_reject["high"]
+                            logger.warning(f"🚨 BEARISH {bear_pattern.upper()} DETECTED 🚨")
+                            sl = bear_sl
                             risk = sl - current_close_price
                             risk_pct = (risk / current_close_price) * 100
                             target_1_5r = current_close_price - (risk * 1.5)
                             target_2r = current_close_price - (risk * 2.0)
                             
                             alert_msg = (
-                                f"🎯 <b>SNIPER ALERT: BEARISH REJECTION</b> 🎯\n\n"
+                                f"🎯 <b>SNIPER ALERT: BEARISH {bear_pattern.upper()}</b> 🎯\n\n"
                                 f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
                                 f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
+                                f"• <b>Pattern:</b> <code>{bear_pattern}</code>\n"
                                 f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
                                 f"• <b>Entry Price:</b> <code>${current_close_price:,.2f}</code>\n"
                                 f"• <b>Stop Loss:</b> <code>${sl:,.2f}</code> ({risk_pct:.2f}% risk)\n"
                                 f"• <b>Target 1 (1.5R):</b> <code>${target_1_5r:,.2f}</code>\n"
                                 f"• <b>Target 2 (2.0R):</b> <code>${target_2r:,.2f}</code>\n"
-                                f"• <b>EMA 10:</b> <code>${c_reject['EMA_10']:,.2f}</code> | <b>EMA 200:</b> <code>${c_reject['EMA_200']:,.2f}</code>\n"
+                                f"• <b>EMA 10:</b> <code>${c_reject['EMA_10']:,.2f}</code> | <b>EMA 15:</b> <code>${c_reject['EMA_15']:,.2f}</code> | <b>EMA 200:</b> <code>${c_reject['EMA_200']:,.2f}</code>\n"
                             )
                             await alerter.send_alert(alert_msg)
                         elif is_bullish:
-                            logger.warning("🟢 BULLISH PULLBACK REJECTION DETECTED 🟢")
-                            sl = c_reject["low"]
+                            logger.warning(f"🟢 BULLISH {bull_pattern.upper()} DETECTED 🟢")
+                            sl = bull_sl
                             risk = current_close_price - sl
                             risk_pct = (risk / current_close_price) * 100
                             target_1_5r = current_close_price + (risk * 1.5)
                             target_2r = current_close_price + (risk * 2.0)
                             
                             alert_msg = (
-                                f"🎯 <b>SNIPER ALERT: BULLISH REJECTION</b> 🎯\n\n"
+                                f"🎯 <b>SNIPER ALERT: BULLISH {bull_pattern.upper()}</b> 🎯\n\n"
                                 f"• <b>Asset:</b> <code>{btc_cfg['symbol']}</code>\n"
                                 f"• <b>Timeframe:</b> <code>{btc_cfg['timeframe']}</code>\n"
+                                f"• <b>Pattern:</b> <code>{bull_pattern}</code>\n"
                                 f"• <b>Time (IST):</b> <code>{formatted_ist_time}</code>\n"
                                 f"• <b>Entry Price:</b> <code>${current_close_price:,.2f}</code>\n"
                                 f"• <b>Stop Loss:</b> <code>${sl:,.2f}</code> ({risk_pct:.2f}% risk)\n"
                                 f"• <b>Target 1 (1.5R):</b> <code>${target_1_5r:,.2f}</code>\n"
                                 f"• <b>Target 2 (2.0R):</b> <code>${target_2r:,.2f}</code>\n"
-                                f"• <b>EMA 10:</b> <code>${c_reject['EMA_10']:,.2f}</code> | <b>EMA 200:</b> <code>${c_reject['EMA_200']:,.2f}</code>\n"
+                                f"• <b>EMA 10:</b> <code>${c_reject['EMA_10']:,.2f}</code> | <b>EMA 15:</b> <code>${c_reject['EMA_15']:,.2f}</code> | <b>EMA 200:</b> <code>${c_reject['EMA_200']:,.2f}</code>\n"
                             )
                             await alerter.send_alert(alert_msg)
                         else:
