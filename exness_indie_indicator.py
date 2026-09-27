@@ -51,73 +51,78 @@ def Main(self, fast_len: int, mid_len: int, slow_len: int, atr_len: int):
     lower_wick = real_body_low - l0
     body_size = abs(c0 - o0)
 
-    vol_ok_pin = (v0 >= vol_avg * 0.60)
-    vol_ok_eng = (v0 >= vol_avg * 0.85)
+    vol_ok = (v0 >= vol_avg * 0.55)
 
     # 2. BEARISH SETUPS
-    macro_down = (c0 < e200) or (e10 < e15 and c0 < e15) or (o0 >= ribbon_bottom and c0 < ribbon_bottom)
+    macro_down = (c0 < e200) or (e10 < e15 and c0 < e15) or (o0 >= ribbon_bottom and c0 < ribbon_bottom) or (h0 >= ribbon_bottom and c0 < ribbon_bottom)
     pull_tested_bear = h0 >= (ribbon_bottom * 0.9995)
     closed_below_ribbon = c0 < ribbon_top
-    within_bear_prox = (ribbon_bottom - c0) <= (atr_val * 0.85)
 
     # 2A. Direct Pinbar Rejection
     is_bear_pin = (
-        pull_tested_bear and closed_below_ribbon and within_bear_prox and
+        pull_tested_bear and closed_below_ribbon and
         (upper_wick >= candle_range * 0.35) and
-        ((upper_wick >= lower_wick * 1.5) or (lower_wick <= candle_range * 0.25)) and
-        (c0 <= (h0 + l0) / 2) and vol_ok_pin
+        (upper_wick >= lower_wick * 1.5) and
+        (lower_wick <= candle_range * 0.25) and
+        (c0 <= (h0 + l0) / 2) and vol_ok
     )
 
-    # 2B. Direct Strong Momentum Breakdown
+    # 2B. Direct Strong Momentum Breakdown (Solid Red Breakdown Bar)
     is_strong_bear = (
+        pull_tested_bear and closed_below_ribbon and
         (c0 < o0) and
-        (h0 >= ribbon_bottom * 0.9995) and
-        (o0 >= ribbon_bottom * 0.998) and
+        (body_size >= candle_range * 0.45) and
+        (lower_wick <= candle_range * 0.20) and
         (c0 < ribbon_bottom) and
-        within_bear_prox and
-        ((upper_wick >= candle_range * 0.15) or (body_size >= candle_range * 0.50)) and
-        vol_ok_pin
+        (c0 <= l0 + candle_range * 0.30) and
+        vol_ok
     )
 
-    # 2C. 2-Candle Bearish Confirmation (Only fires on fresh rejection from EMA test)
-    prev_tested_ema = (h1 >= min(ema10[1], ema15[1]) * 0.9995) and (c1 >= min(ema10[1], ema15[1]) * 0.995)
+    # 2C. 2-Candle Bearish Confirmation
+    prev_tested_ema = (h1 >= min(ema10[1], ema15[1]) * 0.9995)
+    curr_near_ema = (h0 >= ribbon_bottom * 0.997)
     curr_bear_confirm = (
         (c0 < o0) and
-        (c0 < l1) and
+        (body_size >= candle_range * 0.40) and
+        (lower_wick <= candle_range * 0.25) and
+        (c0 <= c1) and
         (c0 < ribbon_bottom) and
-        (h0 >= ribbon_bottom * 0.996) and
-        within_bear_prox and
         (not is_bear_pin) and
         (not is_strong_bear) and
-        vol_ok_pin
+        vol_ok
     )
-    is_2candle_bear = prev_tested_ema and curr_bear_confirm
+    is_2candle_bear = prev_tested_ema and curr_near_ema and curr_bear_confirm
 
     bear_signal = macro_down and (is_bear_pin or is_strong_bear or is_2candle_bear)
 
     # 3. BULLISH SETUPS
-    macro_up = (c0 > e200) or (e10 > e15 and c0 > e15)
+    macro_up = (c0 > e200) or (e10 > e15 and c0 > e15) or (o0 <= ribbon_top and c0 > ribbon_top) or (l0 <= ribbon_top and c0 > ribbon_top)
     pull_tested_bull = l0 <= (ribbon_top * 1.0005)
     closed_above_ribbon = c0 > ribbon_bottom
-    within_bull_prox = (c0 - ribbon_top) <= (atr_val * 0.85)
 
     # 3A. Bullish Pinbar Rejection
     is_bull_pin = (
-        pull_tested_bull and closed_above_ribbon and within_bull_prox and
+        pull_tested_bull and closed_above_ribbon and
         (lower_wick >= candle_range * 0.35) and
-        ((lower_wick >= upper_wick * 1.5) or (upper_wick <= candle_range * 0.25)) and
-        (c0 >= (h0 + l0) / 2) and vol_ok_pin
+        (lower_wick >= upper_wick * 1.5) and
+        (upper_wick <= candle_range * 0.25) and
+        (c0 >= (h0 + l0) / 2) and vol_ok
     )
 
-    # 3B. Bullish Engulfing
-    is_bull_eng = (
-        pull_tested_bull and closed_above_ribbon and within_bull_prox and
+    # 3B. Bullish Engulfing / Solid Expansion off 10/15 EMA
+    solid_green_body = (
         (c0 > o0) and
-        (o0 <= max(c1, o1)) and
-        (c0 >= max(c1, o1)) and
-        (c0 > h1) and
-        (lower_wick >= candle_range * 0.10) and vol_ok_eng
+        (body_size >= candle_range * 0.45) and
+        (upper_wick <= candle_range * 0.25) and
+        (c0 > ribbon_top)
     )
+    engulfs_prev = (
+        (c0 >= max(c1, o1)) and
+        (o0 <= min(c1, o1) * 1.002)
+    )
+    breaks_prev_high = (c0 > h1) and (body_size >= candle_range * 0.50)
+
+    is_bull_eng = pull_tested_bull and closed_above_ribbon and solid_green_body and (engulfs_prev or breaks_prev_high) and vol_ok
 
     bull_signal = macro_up and (is_bull_pin or is_bull_eng)
 
