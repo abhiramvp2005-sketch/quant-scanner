@@ -1,0 +1,23 @@
+name: Auto Deploy to Oracle VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Oracle Cloud VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH and Update Container
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/quant-scanner
+            git pull origin main
+            docker compose up -d --build
+

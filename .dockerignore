@@ -1,0 +1,27 @@
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment secrets
+.env
+
+# Git & IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Logs
+*.log
+quant_scanner.log
+src/quant_scanner.log
+
+# Tests
+test.py
+test_historical_setups.py

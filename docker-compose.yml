@@ -1,0 +1,9 @@
+services:
+  quant-scanner:
+    build: .
+    container_name: quant-scanner
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./quant_scanner.log:/app/quant_scanner.log
