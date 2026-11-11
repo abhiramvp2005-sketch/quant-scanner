@@ -37,8 +37,6 @@ quant-scanner/
 │   ├── data_ingestion.py       # Async CCXT exchange connections and rate limiting
 │   ├── strategy_engine.py      # Pandas-based quantitative logic and signal generation
 │   └── alerts.py               # Telegram bot integration for real-time signaling
-├── indicators/
-│   └── exness_sniper_ema.py    # Custom Indie v5 script for Exness visualization
 ├── .env                        # Private credentials (ignored by Git)
 ├── .gitignore                  # Git tracking rules
 ├── requirements.txt            # Python dependencies
@@ -87,8 +85,6 @@ quant-scanner/
 │   ├── data_ingestion.py       # Async CCXT exchange connections and rate limiting
 │   ├── strategy_engine.py      # Pandas-based quantitative logic and signal generation
 │   └── alerts.py               # Telegram bot integration for real-time signaling
-├── indicators/
-│   └── exness_sniper_ema.py    # Custom Indie v5 script for Exness visualization
 ├── .env                        # Private credentials (ignored by Git)
 ├── .gitignore                  # Git tracking rules
 ├── requirements.txt            # Python dependencies
